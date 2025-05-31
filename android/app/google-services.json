@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "518696594922",
+    "project_id": "flutterapp-21-may",
+    "storage_bucket": "flutterapp-21-may.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:518696594922:android:e0c10c82e14321b20b1693",
+        "android_client_info": {
+          "package_name": "com.example.health_sphere"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "518696594922-jr99g2j6telc93ovmjl7f3kv3vuvug5p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.health_sphere",
+            "certificate_hash": "522ba948857ab60eaee9b98d96d84ef061037fb6"
+          }
+        },
+        {
+          "client_id": "518696594922-n7ughjhvea8h14msfj2foivkttu4ot5l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcWo1Z-gbyqHoQid5uz4BzQkEq-7nRtVE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "518696594922-n7ughjhvea8h14msfj2foivkttu4ot5l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
