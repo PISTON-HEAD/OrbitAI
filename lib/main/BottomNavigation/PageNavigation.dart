@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:health_sphere/Orbit/Workout/WorkoutSection.dart';
+import 'package:health_sphere/Orbit/profile/ProfilePage.dart';
 
 import '../../Orbit/HomePage.dart';
 import '../../Orbit/Notes/NotesScreen.dart';
@@ -21,7 +22,7 @@ class _PageNavigationState extends State<PageNavigation> {
     Placeholder(),
     NotesScreen(),
     FitnessHomePage(),
-    Placeholder(),
+    ProfilePage(),
   ];
 
   void _onItemTapped(int index) {

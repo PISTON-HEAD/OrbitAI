@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:health_sphere/Orbit/Workout/workoutOnboardingScreen.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'WorkoutModel.dart';
 
 class FitnessHomePage extends StatefulWidget {
@@ -35,11 +37,11 @@ class _FitnessHomePageState extends State<FitnessHomePage> {
       },
     );
 
-    /*
-    final url = Uri.parse("https://ai-workout-planner-exercise-fitness-nutrition-guide.p.rapidapi.com/generateWorkoutPlan?noqueue=1");
 
-    final response = await http.post(
-      url,
+    final postUrl = Uri.parse("https://ai-workout-planner-exercise-fitness-nutrition-guide.p.rapidapi.com/generateWorkoutPlan?noqueue=1");
+
+    final postResponse = await http.post(
+      postUrl,
       headers: {
         'X-RapidAPI-Key': 'c2d32c73b9msh424a25d23da6275p1dc20fjsn7dabfd8f6734',
         'X-RapidAPI-Host': 'ai-workout-planner-exercise-fitness-nutrition-guide.p.rapidapi.com',
@@ -55,7 +57,7 @@ class _FitnessHomePageState extends State<FitnessHomePage> {
         "lang": "en"
       }),
     );
-    */
+
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
@@ -81,11 +83,37 @@ class _FitnessHomePageState extends State<FitnessHomePage> {
     loadExercises();
     selectedDate = today;
     weekDates = generateWeek(today);
+    loadExercises();
+    checkFirstTime();
+  }
+
+
+  void checkFirstTime() async {
+    if (await isFirstTimeUser()) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => WorkoutOnboardingScreen()),
+      );
+    } else {
+      // load main data
+      loadExercises();
+    }
+  }
+
+  Future<bool> isFirstTimeUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('onboarding_done') != true;
+  }
+
+  void completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_done', true);
   }
 
   Future<void> loadExercises() async {
     try {
       final data = await fetchExercises("back");
+      if (!mounted) return;
       setState(() {
         exercises = data;
         isLoading = false;
@@ -121,7 +149,7 @@ class _FitnessHomePageState extends State<FitnessHomePage> {
                             fontSize: 20,
                             fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(DateFormat('EEEE d MMM').format(today),
+                    Text(DateFormat('EEEE, d MMM').format(today),
                         style: GoogleFonts.poppins(
                             color: Colors.grey, fontSize: 14)),
                   ],
@@ -129,7 +157,7 @@ class _FitnessHomePageState extends State<FitnessHomePage> {
                 const CircleAvatar(
                   radius: 22,
                   backgroundImage:
-                  AssetImage('assets/images/profile.jpg'),
+                  AssetImage('assets/images/landingPageImage.png'),
                 ),
               ],
             ),
