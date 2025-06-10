@@ -1,6 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -10,220 +12,321 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final Color accentColor = const Color(0xFFB3FF4A);
+  final PageController _pageController = PageController();
+  int _selectedTabIndex = 0;
+  bool isLoading = false; // Spinner state
+  List<String> postImageUrls = [];
 
-  Future<Map<String, dynamic>?> fetchUserGoalData() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return null;
+  void _onTabChanged(int index) {
+    setState(() => _selectedTabIndex = index);
+    _pageController.animateToPage(index,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('notes')
-        .doc(uid)
-        .collection('goal')
-        .orderBy('timestamp', descending: true)
-        .limit(1)
-        .get();
+  @override
+  void initState() {
+    super.initState();
+    fetchPosts();
+  }
 
-    if (snapshot.docs.isNotEmpty) {
-      return snapshot.docs.first.data();
-    } else {
-      return null;
+  Future<void> fetchPosts() async {
+    final supabase = Supabase.instance.client;
+    final response = await supabase
+        .from('posts')
+        .select('image_url')
+        .order('created_at', ascending: false);
+
+    setState(() {
+      postImageUrls = response
+          .map<String>((row) => "${row['image_url']}?t=${DateTime.now().millisecondsSinceEpoch}")
+          .toList();
+    });
+  }
+
+  Future<void> pickAndUploadImage(ImageSource source) async {
+    setState(() => isLoading = true);
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: source, imageQuality: 85);
+      if (pickedFile == null) {
+        setState(() => isLoading = false);
+        return;
+      }
+
+      final file = File(pickedFile.path);
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      final supabase = Supabase.instance.client;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+
+      final storageResponse =
+      await supabase.storage.from('posts').upload('public/$fileName', file);
+
+      if (storageResponse.isEmpty) {
+        debugPrint('Error uploading image.');
+        setState(() => isLoading = false);
+        return;
+      }
+
+      final imageUrl = supabase.storage
+          .from('posts')
+          .getPublicUrl('public/$fileName') +
+          '?t=${DateTime.now().millisecondsSinceEpoch}';
+
+      await supabase.from('posts').insert({
+        'image_url': imageUrl,
+        'created_at': DateTime.now().toIso8601String(),
+        'user_id': userId,
+      });
+
+      setState(() {
+        postImageUrls.insert(0, imageUrl);
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Upload error: $e");
+      setState(() => isLoading = false);
     }
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        return Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera, color: Colors.white),
+              title: const Text("Camera", style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                pickAndUploadImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.white),
+              title: const Text("Gallery", style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                pickAndUploadImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final height = mediaQuery.size.height;
-    final width = mediaQuery.size.width;
+    final accentColor = const Color(0xFFB3FF4A);
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Header
-              Container(
-                width: width,
-                color: accentColor,
-                padding: EdgeInsets.symmetric(
-                    horizontal: width * 0.04, vertical: height * 0.02),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: width * 0.08,
-                      backgroundImage:
-                      const AssetImage('assets/user.jpg'), // Replace if needed
-                    ),
-                    SizedBox(width: width * 0.03),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "${FirebaseAuth.instance.currentUser?.displayName ?? ''}",
-                          style: TextStyle(
-                              fontSize: width * 0.045,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black),
-                        ),
-                        Text(
-                          "${FirebaseAuth.instance.currentUser?.email ?? ''}",
-                          style: TextStyle(
-                              fontSize: width * 0.035, color: Colors.black87),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(Icons.settings, color: Colors.black, size: width * 0.07),
-                      onPressed: () {},
-                    )
-                  ],
-                ),
-              ),
-
-              // Follower stats
-              Padding(
-                padding: EdgeInsets.symmetric(
-                    horizontal: width * 0.04, vertical: height * 0.02),
-                child: Row(
-                  children: [
-                    Text("1.5K Followers",
-                        style: TextStyle(
-                            color: Colors.white, fontSize: width * 0.04)),
-                    SizedBox(width: width * 0.02),
-                    Text("0 Following",
-                        style: TextStyle(
-                            color: Colors.white54, fontSize: width * 0.038)),
-                    const Spacer(),
-                    ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accentColor,
-                        foregroundColor: Colors.black,
-                        shape: const StadiumBorder(),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                // HEADER SECTION
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const CircleAvatar(
+                        radius: 36,
+                        backgroundColor: Colors.purpleAccent,
                       ),
-                      child: Text("+ Friends",
-                          style: TextStyle(fontSize: width * 0.035)),
-                    )
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              FirebaseAuth.instance.currentUser?.displayName ?? "User",
+                              style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              FirebaseAuth.instance.currentUser?.email ?? "user@email.com",
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {},
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentColor,
+                          padding: const EdgeInsets.all(8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                        child: const Icon(Icons.settings, color: Colors.white),
+                      )
+                    ],
+                  ),
                 ),
-              ),
 
-              // Stats Grid
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: width * 0.04),
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  crossAxisSpacing: width * 0.025,
-                  mainAxisSpacing: width * 0.025,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1,
-                  children: [
-                    statCard("Balance", "51", Icons.star, accentColor, width),
-                    statCard("Level", "1", Icons.emoji_events, accentColor,
-                        width,
-                        label: "Record"),
-                    statCard("Current League", "Barefoot", Icons.favorite,
-                        accentColor, width),
-                    statCard(
-                        "Total XP", "30", Icons.flash_on, accentColor, width),
-                  ],
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    "Fitness trainer & athlete. On a journey to inspire strength and discipline. Let's level up!",
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.location_pin, size: 16, color: Colors.white54),
+                      SizedBox(width: 4),
+                      Text("Mumbai, India", style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
 
-              // Weekly XP Chart
-              Padding(
-                padding: EdgeInsets.all(width * 0.04),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Weekly XP",
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 72),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _statItem("24.6K", "Followers"),
+                      _statItem("532", "Following"),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // TABS
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ["Workouts", "Posts"].asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final label = entry.value;
+                    final isSelected = _selectedTabIndex == index;
+                    return TextButton(
+                      onPressed: () => _onTabChanged(index),
+                      child: Text(
+                        label,
                         style: TextStyle(
-                            fontSize: width * 0.045,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-                    SizedBox(height: height * 0.015),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: List.generate(7, (index) {
-                        final heights = [
-                          0.18,
-                          0.14,
-                          0.12,
-                          0.10,
-                          0.08,
-                          0.13,
-                          0.17
-                        ]; // % height
-                        return Container(
-                          width: width * 0.025,
-                          height: height * heights[index],
-                          decoration: BoxDecoration(
-                            color: accentColor,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        );
-                      }),
-                    )
-                  ],
+                          color: isSelected ? Colors.white : Colors.white54,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 16,
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
-              )
-            ],
+                const Divider(color: Colors.white24),
+
+                // PAGE CONTENT (SWIPEABLE)
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: (index) =>
+                        setState(() => _selectedTabIndex = index),
+                    children: [
+                      // Workouts View
+                      ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: 6,
+                        itemBuilder: (context, index) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[800],
+                              borderRadius: BorderRadius.circular(12),
+                              image: const DecorationImage(
+                                image: AssetImage("assets/workout.jpg"),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // Posts View
+                      GridView.builder(
+                        padding: const EdgeInsets.all(5),
+                        itemCount: postImageUrls.length + 1,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 1,
+                        ),
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return GestureDetector(
+                              onTap: _showImageSourceDialog,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[850],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.add,
+                                      color: Colors.white70, size: 40),
+                                ),
+                              ),
+                            );
+                          }
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[800],
+                              borderRadius: BorderRadius.circular(8),
+                              image: DecorationImage(
+                                image: NetworkImage(postImageUrls[index - 1]),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          if (isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.7),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget statCard(String title, String value, IconData icon, Color color,
-      double width,
-      {String? label}) {
-    return Container(
-      padding: EdgeInsets.all(width * 0.04),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(width * 0.05),
-      ),
-      child: Stack(
-        children: [
-          if (label != null)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                    horizontal: width * 0.025, vertical: width * 0.012),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: width * 0.025,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black)),
-              ),
-            ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color, size: width * 0.06),
-              SizedBox(height: width * 0.025),
-              Text(value,
-                  style: TextStyle(
-                      fontSize: width * 0.05,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white)),
-              Text(title,
-                  style: TextStyle(
-                      fontSize: width * 0.035, color: Colors.white70)),
-            ],
-          ),
-        ],
-      ),
+  Widget _statItem(String value, String label) {
+    return Column(
+      children: [
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.white70)),
+      ],
     );
   }
 }
